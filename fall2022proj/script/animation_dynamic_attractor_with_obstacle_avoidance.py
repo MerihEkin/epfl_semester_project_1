@@ -1,0 +1,297 @@
+from typing import List
+import lpv_ds
+import matlab.engine
+import numpy as np
+from random import random
+from random import shuffle
+
+import pyLasaDataset as lasa
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib import animation
+import matplotlib.patches as mplp
+
+from dynamic_obstacle_avoidance.obstacles import Polygon
+
+# from dynamic_obstacle_avoidance.obstacles import Cuboid, Ellipse
+from dynamic_obstacle_avoidance.obstacles import CuboidXd as Cuboid
+from dynamic_obstacle_avoidance.obstacles import EllipseWithAxes as Ellipse
+
+from dynamic_obstacle_avoidance.containers import ObstacleContainer, obstacle_container
+
+from dynamic_obstacle_avoidance.avoidance import ModulationAvoider
+from dynamic_obstacle_avoidance.visualization import plot_obstacles
+
+from vartools.animator import Animator
+from sklearn.mixture import GaussianMixture
+from vartools.dynamical_systems import LinearSystem
+
+eps = 1e-5
+realmin = 2e-100
+
+
+class DynamicalSystemAnimation(Animator):
+    dim = 2
+
+    def setup(
+        self,
+        start_position,
+        ds_gmm: lpv_ds.GmmVariables,
+        A_g,
+        b_g,
+        obstacle_environment: ObstacleContainer,
+        obstacle_targets: List,
+        reference_path,
+        x_lim=[-1.5, 2],
+        y_lim=[-0.5, 2.5],
+    ):
+        self.start_position = start_position
+        self.ds_gmm = ds_gmm
+        self.A_g = A_g
+        self.b_g = b_g
+        self.obstacle_environment = obstacle_environment
+        self.obstacle_targets = obstacle_targets
+        self.reference_path = reference_path
+        self.x_lim = x_lim
+        self.y_lim = y_lim
+
+        assert (len(self.obstacle_targets) <= len(
+            self.obstacle_environment._obstacle_list))
+
+        self.fig, self.ax = plt.subplots(figsize=(10, 8))
+
+        self.agent_positions = np.zeros((self.dim, self.it_max))
+        self.agent_positions[:, 0] = self.start_position
+
+        self.lpvds = lpv_ds.LpvDs(eps, realmin)
+
+        self.K = ds_gmm.mu.shape[1]
+        self.attractor_dynamics = []
+        self.dynamic_avoiders = []
+        self.attractor_colors = []
+        self.attractor_positions = np.zeros((self.dim, self.it_max, self.K))
+        for i in range(self.K):
+            self.attractor_dynamics.append(
+                LinearSystem(
+                    attractor_position=self.ds_gmm.mu[:, i],
+                    maximum_velocity=1,
+                    distance_decrease=0.3,
+                )
+            )
+            self.dynamic_avoiders.append(
+                ModulationAvoider(
+                    initial_dynamics=self.attractor_dynamics[i], obstacle_environment=self.obstacle_environment
+                )
+            )
+            self.attractor_positions[:, 0, i] = self.ds_gmm.mu[:, i]
+            self.attractor_colors.append((random(), random(), random()))
+
+    def update_step(self, ii):
+
+        # Update attractors
+        for i in range(self.K):
+            velocity = self.dynamic_avoiders[i].evaluate(
+                self.attractor_positions[:, ii-1, i])
+            self.attractor_positions[:, ii, i] = self.attractor_positions[:,
+                                                                          ii-1, i] + velocity * self.dt_simulation
+            self.ds_gmm.mu[:, i] = self.attractor_positions[:, ii, i]
+
+        # Update agent
+        x = self.agent_positions[:, ii-1]
+        x.shape = (2, 1)
+        x_dot = self.lpvds.evaluate(
+            x, self.ds_gmm, self.A_g, self.b_g)
+        x_dot = (x_dot / np.linalg.norm(x_dot, 2))
+        x_dot.shape = (1, 2)
+        self.agent_positions[:, ii] = (
+            self.dt_simulation * x_dot + self.agent_positions[:, ii-1])
+
+        # Update obstacles
+        for i in range(len(self.obstacle_targets)):
+            target_pos = self.obstacle_targets[i]
+            current_pos = self.obstacle_environment._obstacle_list[i].center_position
+            dst = target_pos - current_pos
+            if (np.linalg.norm(dst, 2) < 0.5 and not np.allclose(self.obstacle_environment._obstacle_list[i].linear_velocity, np.array([0.0, 0.0]))):
+                self.obstacle_environment._obstacle_list[i].linear_velocity = np.array([
+                    0.0, 0.0])
+            elif (np.linalg.norm(dst, 2) < 0.5):
+                pass
+            else:
+                self.obstacle_environment._obstacle_list[i].linear_velocity = dst / np.linalg.norm(
+                    dst, 2)
+
+        self.obstacle_environment.do_velocity_step(
+            delta_time=self.dt_simulation)
+
+        # Draw ref path
+        self.ax.clear()
+        self.ax.set_xlim(self.x_lim)
+        self.ax.set_ylim(self.y_lim)
+        self.ax.plot(self.reference_path[:, 0], self.reference_path[:, 1],
+                     markersize=0.25, marker=".", color="yellowgreen")
+
+        # Draw obstacles
+        plot_obstacles(
+            ax=self.ax,
+            obstacle_container=self.obstacle_environment,
+            x_lim=self.x_lim,
+            y_lim=self.y_lim,
+            showLabel=False,
+        )
+
+        # Draw attractor regions
+        self.plot_attractors(ii)
+
+        # Draw the agent
+        self.plot_agent(ii)
+
+        self.ax.grid()
+        self.ax.set_aspect("equal", adjustable="box")
+
+    def plot_attractors(self, ii):
+        for i in range(self.K):
+            covariances = self.ds_gmm.sigma[:, :, i]
+            center = self.ds_gmm.mu[:, i]
+            v, w = np.linalg.eigh(covariances)
+            u = w[0] / np.linalg.norm(w[0])
+            angle = np.arctan2(u[1], u[0])
+            angle = 180 * angle / np.pi
+            v = 2.0 * np.sqrt(2.0) * np.sqrt(v)
+            ell = mplp.Ellipse(
+                center, v[0], v[1], 180 + angle)
+            ell.set_alpha(0.25)
+            ell.set_facecolor(self.attractor_colors[i])
+            self.ax.add_artist(ell)
+            self.ax.plot(self.ds_gmm.mu[0, i],
+                         self.ds_gmm.mu[1, i], "k*", markersize=8)
+
+    def plot_agent(self, ii):
+        self.ax.plot(
+            self.agent_positions[0, :ii], self.agent_positions[1, :ii], color="#135e08",)
+        self.ax.plot(
+            self.agent_positions[0, ii], self.agent_positions[1, ii], "o", color="#135e08", markersize=12,)
+
+    def has_converged(self, ii) -> bool:
+        return False
+
+
+def get_gmm_from_matlab(position, velocity, final_pos: np.array):
+
+    lyap_constr = 2
+    init_cvx = 1
+    symm_constr = 0
+
+    est_options = {
+        "type": 0,
+        "maxK": 15.0,
+        "fixed_K": matlab.double([]),
+        "samplerIter": 20.0,
+        "do_plots": 0,
+        "sub_sample": 1,
+        "estimate_l": 1.0,
+        "l_sensitivity": 2.0,
+        "length_scale": matlab.double([]),
+    }
+
+    data_py = np.vstack((position, velocity))
+
+    if not "matlab_eng" in locals():
+        matlab_eng = matlab.engine.start_matlab()
+
+    pos_array = matlab.double(position.astype('float64'))
+    vel_array = matlab.double(velocity.astype('float64'))
+    Data = matlab.double(data_py.astype('float64'))
+
+    priors, mu, sigma = matlab_eng.fit_gmm(
+        pos_array, vel_array, est_options, nargout=3)
+
+    ds_gmm = {
+        "Mu": mu,
+        "Priors": priors,
+        "Sigma": sigma,
+    }
+
+    Vxf = matlab_eng.learn_wsaqf(Data, nargout=1)
+    P_opt = Vxf["P"]
+
+    att = matlab.double(final_pos.astype('float64'))
+    att = matlab_eng.transpose(att)
+
+    A_k, b_k, P = matlab_eng.optimize_lpv_ds_from_data(
+        Data, att, lyap_constr, ds_gmm, P_opt, init_cvx, symm_constr, nargout=3)
+
+    matlab_eng.quit()
+
+    priors = np.array(priors)
+    mu = np.array(mu)
+    sigma = np.array(sigma)
+    A_k = np.array(A_k)
+    b_k = np.array(b_k)
+    P = np.array(P)
+
+    return priors, mu, sigma, A_k, b_k, P
+
+
+def run_simulation():
+    path_index = 0
+    path = lasa.DataSet.BendedLine.demos[path_index]
+    pos = path.pos
+    vel = path.vel
+    final_pos = pos[:, -1]
+    priors, mu, sigma, A_k, b_k, _ = get_gmm_from_matlab(pos, vel, final_pos)
+    ds_gmm = lpv_ds.GmmVariables(mu, priors, sigma)
+
+    obstacle_environment = ObstacleContainer()
+    obstacle_environment.append(
+        Ellipse(
+            axes_length=[2.0, 2.0],
+            center_position=np.array([-5.0, 10.0]),
+            margin_absolut=0.5,
+            orientation=0,
+            linear_velocity=np.array([0.0, 0.0]),
+            tail_effect=False,
+        )
+    )
+    obstacle_environment.append(
+        Ellipse(
+            axes_length=[2.0, 2.0],
+            center_position=np.array([-30.0, 4.0]),
+            margin_absolut=0.5,
+            orientation=0,
+            linear_velocity=np.array([0.0, 0.0]),
+            tail_effect=False,
+        )
+    )
+
+    obstacle_targets = []
+    idx = list(range(mu.shape[1]))
+    shuffle(idx)
+    for i in idx:
+        obstacle_targets.append(np.array([mu[0, i], mu[1, i]]))
+        if (len(obstacle_targets) == len(obstacle_environment._obstacle_list)):
+            break
+
+    my_animation = DynamicalSystemAnimation(
+        it_max=10000,
+        dt_simulation=0.05,
+        dt_sleep=0.01,
+    )
+
+    my_animation.setup(
+        # start_position=pos[:, 0],
+        start_position=pos[:, 0],
+        ds_gmm=ds_gmm,
+        A_g=A_k,
+        b_g=b_k,
+        obstacle_environment=obstacle_environment,
+        obstacle_targets=obstacle_targets,
+        reference_path=pos.transpose(),
+        x_lim=[-42.0, 2.0],
+        y_lim=[-4.0, 12.0],
+    )
+
+    my_animation.run()
+
+
+if (__name__) == "__main__":
+    run_simulation()

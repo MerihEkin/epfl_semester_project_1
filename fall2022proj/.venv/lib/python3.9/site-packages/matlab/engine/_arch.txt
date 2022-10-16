@@ -1,0 +1,4 @@
+glnxa64
+/usr/local/MATLAB/R2022b/bin/glnxa64
+/usr/local/MATLAB/R2022b/extern/engines/python/dist/matlab/engine/glnxa64
+/usr/local/MATLAB/R2022b/extern/bin/glnxa64
