@@ -51,6 +51,30 @@
             "program": "fall2022proj/script/vectorfield.py",
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "week5_1",
+            "type": "python",
+            "request": "launch",
+            "program": "fall2022proj/script/week5_1.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "week5_2",
+            "type": "python",
+            "request": "launch",
+            "program": "fall2022proj/script/week5_2.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "week6_1",
+            "type": "python",
+            "request": "launch",
+            "program": "fall2022proj/script/week6_1.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
     ]
 }

@@ -78,7 +78,7 @@ def plot_vector_field():
     final_pos = pos[:, -1]
     priors, mu, sigma, A_k, b_k, _ = get_gmm_from_matlab(pos, vel, final_pos)
     ds_gmm = lpv_ds.GmmVariables(mu, priors, sigma)
-    lpvds = lpv_ds.LpvDs(eps, realmin)
+    lpvds = lpv_ds.LpvDs(A_k=A_k, b_k=b_k, eps=eps, realmin=realmin)
 
     fig, ax = plt.subplots(figsize=(10, 8))
     x_lim = [-42.0, 2.0],
@@ -97,7 +97,7 @@ def plot_vector_field():
         for j in range(L-1):
             x = positions_arr[j, :, i]
             x.shape = (2, 1)
-            x_dot = lpvds.evaluate(x, ds_gmm, A_k, b_k)
+            x_dot = lpvds.evaluate(x, ds_gmm)
             x_dot.shape = (1, 2)
             positions_arr[j+1, :, i] = positions_arr[j, :, i] + \
                 0.1 * x_dot / np.linalg.norm(x_dot, 2)
