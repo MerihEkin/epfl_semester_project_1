@@ -2,7 +2,6 @@ from typing import List
 
 from sympy import false, true
 import lpv_ds
-import matlab.engine
 import numpy as np
 from random import random
 from random import shuffle
@@ -10,6 +9,7 @@ from random import shuffle
 import pyLasaDataset as lasa
 import matplotlib.pyplot as plt
 import matplotlib.patches as mplp
+import load_dataset_and_params as dataloader
 
 # from dynamic_obstacle_avoidance.obstacles import Cuboid, Ellipse
 from dynamic_obstacle_avoidance.obstacles import CuboidXd as Cuboid
@@ -24,14 +24,6 @@ from vartools.animator import Animator
 from sklearn.mixture import GaussianMixture
 from vartools.dynamical_systems import LinearSystem
 from random import randrange
-
-eps = 1e-5
-realmin = 2e-100
-pi = 3.14
-
-manually_change_centroid_locations = false
-update_bk_with_new_centroid_locations = false
-resolve_optimization_for_Ak_and_bk = false
 
 
 class DynamicalSystemAnimation(Animator):
@@ -60,7 +52,8 @@ class DynamicalSystemAnimation(Animator):
         self.y_lim = y_lim
 
         self.agent_dynamics = lpv_ds.LpvDs(
-            A_k=self.A_g, b_k=self.b_g, eps=eps, realmin=realmin)
+            A_k=A_g, b_k=b_g, ds_gmm=ds_gmm
+        )
 
         self.agent_dynamic_avoider = ModulationAvoider(
             initial_dynamics=self.agent_dynamics,
@@ -109,8 +102,8 @@ class DynamicalSystemAnimation(Animator):
             self.ds_gmm.mu[:, i] = self.attractor_positions[:, ii, i]
 
         # Update agent
-        x_dot = self.agent_dynamic_avoider.evaluate_with_gmm(
-            self.agent_positions[:, ii-1], self.ds_gmm)
+        x_dot = self.agent_dynamic_avoider.evaluate(
+            self.agent_positions[:, ii-1])
 
         # x_dot = (x_dot / np.linalg.norm(x_dot, 2))
         if (np.linalg.norm(x_dot) > self.max_vel):
@@ -141,7 +134,7 @@ class DynamicalSystemAnimation(Animator):
         self.ax.set_xlim(self.x_lim)
         self.ax.set_ylim(self.y_lim)
         self.ax.plot(self.reference_path[:, 0], self.reference_path[:, 1],
-                     markersize=0.25, marker=".", color="yellowgreen")
+                     linewidth='3.0', color="dimgray", label="Reference Trajectory")
 
         # Draw obstacles
         plot_obstacles(
@@ -159,6 +152,9 @@ class DynamicalSystemAnimation(Animator):
         self.plot_agent(ii)
 
         self.ax.grid()
+        self.ax.plot(self.reference_path[-1, 0], self.reference_path[-1, 1],
+                     marker="X", markersize=12.0, color="black", label="Attractor")
+        self.ax.legend()
         self.ax.set_aspect("equal", adjustable="box")
 
     def plot_attractors(self, ii):
@@ -180,7 +176,7 @@ class DynamicalSystemAnimation(Animator):
 
     def plot_agent(self, ii):
         self.ax.plot(
-            self.agent_positions[0, :ii], self.agent_positions[1, :ii], color="#135e08",)
+            self.agent_positions[0, :ii], self.agent_positions[1, :ii], linewidth='3.0', color="#135e08", label="Computed Trajectory")
         self.ax.plot(
             self.agent_positions[0, ii], self.agent_positions[1, ii], "o", color="#135e08", markersize=12,)
 
@@ -188,194 +184,35 @@ class DynamicalSystemAnimation(Animator):
         return False
 
 
-def get_gmm_from_matlab(position, velocity, final_pos: np.array):
-
-    lyap_constr = 2
-    init_cvx = 1
-    symm_constr = 0
-
-    est_options = {
-        "type": 0,
-        "maxK": 15.0,
-        "fixed_K": matlab.double([]),
-        "samplerIter": 20.0,
-        "do_plots": 0,
-        "sub_sample": 1,
-        "estimate_l": 1.0,
-        "l_sensitivity": 2.0,
-        "length_scale": matlab.double([]),
-    }
-
-    data_py = np.vstack((position, velocity))
-
-    if not "matlab_eng" in locals():
-        matlab_eng = matlab.engine.start_matlab()
-
-    pos_array = matlab.double(position.astype('float64'))
-    vel_array = matlab.double(velocity.astype('float64'))
-    Data = matlab.double(data_py.astype('float64'))
-
-    priors, mu, sigma = matlab_eng.fit_gmm(
-        pos_array, vel_array, est_options, nargout=3)
-
-    ds_gmm = {
-        "Mu": mu,
-        "Priors": priors,
-        "Sigma": sigma,
-    }
-
-    Vxf = matlab_eng.learn_wsaqf(Data, nargout=1)
-    P_opt = Vxf["P"]
-
-    att = matlab.double(final_pos.astype('float64'))
-    att = matlab_eng.transpose(att)
-
-    A_k, b_k, P = matlab_eng.optimize_lpv_ds_from_data(
-        Data, att, lyap_constr, ds_gmm, P_opt, init_cvx, symm_constr, nargout=3)
-
-    matlab_eng.quit()
-
-    priors = np.array(priors)
-    mu = np.array(mu)
-    sigma = np.array(sigma)
-    A_k = np.array(A_k)
-    b_k = np.array(b_k)
-    P = np.array(P)
-
-    return priors, mu, sigma, A_k, b_k, P
-
-
-def get_Ak_and_bk_from_gmm(position, velocity, final_pos: np.array, priors, mu, sigma):
-
-    lyap_constr = 2
-    init_cvx = 1
-    symm_constr = 0
-
-    est_options = {
-        "type": 0,
-        "maxK": 15.0,
-        "fixed_K": matlab.double([]),
-        "samplerIter": 20.0,
-        "do_plots": 0,
-        "sub_sample": 1,
-        "estimate_l": 1.0,
-        "l_sensitivity": 2.0,
-        "length_scale": matlab.double([]),
-    }
-
-    data_py = np.vstack((position, velocity))
-
-    if not "matlab_eng" in locals():
-        matlab_eng = matlab.engine.start_matlab()
-
-    pos_array = matlab.double(position.astype('float64'))
-    vel_array = matlab.double(velocity.astype('float64'))
-    Data = matlab.double(data_py.astype('float64'))
-
-    priors = matlab.double(priors.astype('float64'))
-    mu = matlab.double(mu.astype('float64'))
-    sigma = matlab.double(sigma.astype('float64'))
-
-    ds_gmm = {
-        "Mu": mu,
-        "Priors": priors,
-        "Sigma": sigma,
-    }
-
-    Vxf = matlab_eng.learn_wsaqf(Data, nargout=1)
-    P_opt = Vxf["P"]
-
-    att = matlab.double(final_pos.astype('float64'))
-    att = matlab_eng.transpose(att)
-
-    A_k, b_k, P = matlab_eng.optimize_lpv_ds_from_data(
-        Data, att, lyap_constr, ds_gmm, P_opt, init_cvx, symm_constr, nargout=3)
-
-    matlab_eng.quit()
-
-    A_k = np.array(A_k)
-    b_k = np.array(b_k)
-    P = np.array(P)
-
-    return A_k, b_k, P
-
-
 def run_simulation():
-    path_index = 0
-    path = lasa.DataSet.BendedLine.demos[path_index]
-    pos = path.pos
-    vel = path.vel
-    final_pos = pos[:, -1]
+    _, pos, _, priors, mus, sigmas, A_k, b_k, x_lim, y_lim = dataloader.load_data_with_predefined_params(
+        'BendedLine')
 
-    x_lim = [-55.0, 15.0]
-    y_lim = [-10.0, 25.0]
-
-    # priors, mu, sigma, A_k, b_k, _ = get_gmm_from_matlab(pos, vel, final_pos)
-
-    priors = np.array([[0.314, 0.193, 0.09, 0.125, 0.146, 0.132]])
-    mu_original = np.array([[-18.24738241,  -2.38762792, -39.88113386, -33.02005433, -16.73786891, -35.41178583],
-                            [-2.01251209,   1.94543297,   3.67688337,   9.87653523, 8.73540075,  -1.68948461]])
-    mu = np.array([[-18.24738241,  -2.38762792, -39.88113386, -33.02005433, -16.73786891, -35.41178583],
-                  [-2.01251209,   1.94543297,   3.67688337,   9.87653523, 8.73540075,  -1.68948461]])
-    sigma = np.array([[[4.72548104e+01,  9.51259945e+00,  5.33200857e+00,
-                        1.53709129e+01,  3.45132894e+01,  1.40814127e+01],
-                       [-3.76600106e-02, -5.24313331e+00,  6.45669632e-01,
-                        3.22841802e+00, -9.24930031e+00, -1.07890577e+00]],
-                      [[-3.76600106e-02, -5.24313331e+00,  6.45669632e-01,
-                        3.22841802e+00, -9.24930031e+00, -1.07890577e+00],
-                       [1.16414861e-01,  3.98247450e+00,  4.98111432e+00,
-                          2.14939176e+00,  3.28400643e+00,  8.39037137e-01]]])
-    A_k = np.array([[[-4.31045650e-04,  4.18354787e-01,  1.76021431e-01,
-                      3.77465310e-01,  7.32518883e-01,  1.21667038e-01],
-                     [8.49819063e-05,  3.94922238e+00,  2.76803103e+00,
-                      2.97203976e+00,  3.76181358e+00,  4.37518747e+00]],
-                    [[8.49819063e-05, -2.27118040e+00, -3.91746552e-01,
-                      -6.55744803e-01, -1.08346276e+00, -1.26452215e-01],
-                     [-6.89553107e-05, -5.06866106e+00, -5.48327846e-01,
-                        -1.69308978e+00, -2.73017118e+00, -2.17499945e+00]]])
-    b_k = np.array([[-2.26896828e-10,  1.54856698e-11, -1.07329064e-12,
-                     -6.75164833e-13,  1.47433625e-13, -2.30172642e-11],
-                    [-2.11879115e-11, -3.58536067e-12, -3.24357875e-13,
-                     1.45587833e-12,  4.08763595e-12, -3.29942349e-11]])
-
-    ds_gmm = lpv_ds.GmmVariables(mu, priors, sigma)
-
-    if manually_change_centroid_locations:
-        mu = np.array([[-18.24738241,  -2.38762792, -39.88113386, -33.02005433, -16.09, -35.41178583],
-                       [-2.01251209,   1.94543297,   3.67688337,   9.87653523, 2.0,  -1.68948461]])
-
-    if update_bk_with_new_centroid_locations:
-        for iter in range(mu.shape[1]):
-            b_k[:, iter] += A_k[:, :, iter] @ \
-                mu_original[:, iter] - A_k[:, :, iter] @ mu[:, iter]
-
-    if resolve_optimization_for_Ak_and_bk:
-        A_k, b_k, _ = get_Ak_and_bk_from_gmm(
-            pos, vel, final_pos, priors, mu, sigma)
-
-    ds_gmm = lpv_ds.GmmVariables(mu, priors, sigma)
+    ds_gmm = lpv_ds.GmmVariables(mus, priors, sigmas)
 
     obstacle_environment = ObstacleContainer()
+
     obstacle_environment.append(
         Cuboid(
             axes_length=[5.0, 15.0],
-            center_position=np.array([-16.0, 10.0]),
+            # center_position=np.array([-12.0, 28.0]),
+            center_position=np.array([-12.0, 10.0]),
             margin_absolut=0.5,
             tail_effect=False,
         )
     )
 
-    # obstacle_environment.append(
-    #     Ellipse(
-    #         axes_length=[10.0, 10.0],
-    #         center_position=np.array([-32.0, 9.7]),
-    #         margin_absolut=0.5,
-    #         orientation=0,
-    #         tail_effect=False,
-    #     )
-    # )
+    obstacle_environment.append(
+        Ellipse(
+            axes_length=[5.0, 5.0],
+            center_position=np.array([-38.0, 7.5]),
+            margin_absolut=0.5,
+            tail_effect=False,
+        )
+    )
 
     obstacle_targets = []
+    #obstacle_targets.append(np.array([-16.0, 10.0]))
     # idx = list(range(mu.shape[1]))
     # shuffle(idx)
     # for i in idx:
@@ -390,7 +227,6 @@ def run_simulation():
     )
 
     my_animation.setup(
-        # start_position=pos[:, 0],
         start_position=np.array([-37.4, -2.2]),
         ds_gmm=ds_gmm,
         A_g=A_k,

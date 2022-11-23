@@ -6,9 +6,7 @@ from random import random
 from random import shuffle
 
 import pyLasaDataset as lasa
-import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib import animation
 import matplotlib.patches as mplp
 
 from dynamic_obstacle_avoidance.obstacles import Polygon
@@ -17,13 +15,12 @@ from dynamic_obstacle_avoidance.obstacles import Polygon
 from dynamic_obstacle_avoidance.obstacles import CuboidXd as Cuboid
 from dynamic_obstacle_avoidance.obstacles import EllipseWithAxes as Ellipse
 
-from dynamic_obstacle_avoidance.containers import ObstacleContainer, obstacle_container
+from dynamic_obstacle_avoidance.containers import ObstacleContainer
 
 from dynamic_obstacle_avoidance.avoidance import ModulationAvoider
 from dynamic_obstacle_avoidance.visualization import plot_obstacles
 
 from vartools.animator import Animator
-from sklearn.mixture import GaussianMixture
 from vartools.dynamical_systems import LinearSystem
 
 eps = 1e-5
@@ -64,7 +61,7 @@ class DynamicalSystemAnimation(Animator):
         self.agent_positions[:, 0] = self.start_position
 
         self.lpvds = lpv_ds.LpvDs(
-            A_k=self.A_g, b_k=self.b_g, eps=eps, realmin=realmin)
+            A_k=self.A_g, b_k=self.b_g, ds_gmm=self.ds_gmm)
 
         self.K = ds_gmm.mu.shape[1]
         self.attractor_dynamics = []
@@ -98,12 +95,8 @@ class DynamicalSystemAnimation(Animator):
             self.ds_gmm.mu[:, i] = self.attractor_positions[:, ii, i]
 
         # Update agent
-        x = self.agent_positions[:, ii-1]
-        x.shape = (2, 1)
-        x_dot = self.lpvds.evaluate(
-            x, self.ds_gmm)
+        x_dot = self.lpvds.evaluate(self.agent_positions[:, ii-1])
         x_dot = (x_dot / np.linalg.norm(x_dot, 2))
-        x_dot.shape = (1, 2)
         self.agent_positions[:, ii] = (
             self.dt_simulation * x_dot + self.agent_positions[:, ii-1])
 
