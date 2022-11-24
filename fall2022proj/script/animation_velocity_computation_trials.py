@@ -7,12 +7,10 @@ import matlab.engine
 import numpy as np
 from random import random
 from random import shuffle
+import load_dataset_and_params as dataloader
 
-import pyLasaDataset as lasa
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as mplp
-
 
 # from dynamic_obstacle_avoidance.obstacles import Cuboid, Ellipse
 from dynamic_obstacle_avoidance.obstacles import CuboidXd as Cuboid
@@ -27,7 +25,8 @@ from vartools.animator import Animator
 from vartools.dynamical_systems import LinearSystem
 import motion_learning_w_local_obstacle_avoidance as MLWOA
 
-pi = 3.14
+# 'ProblemCase', 'LocalMinimaStaticObstacles', 'DynamicObstaclesCase'
+scenario = 'ProblemCase'
 
 
 class DynamicalSystemAnimation(Animator):
@@ -42,6 +41,7 @@ class DynamicalSystemAnimation(Animator):
         obstacle_environment: ObstacleContainer,
         obstacle_targets: List,
         reference_path,
+        update_gmm_locations=False,
         x_lim=[-1.5, 2],
         y_lim=[-0.5, 2.5],
     ):
@@ -54,6 +54,7 @@ class DynamicalSystemAnimation(Animator):
         self.reference_path = reference_path
         self.x_lim = x_lim
         self.y_lim = y_lim
+        self.update_gmm_locations = update_gmm_locations
 
         self.lpv_ds = lpv_ds.LpvDs(
             A_k=self.A_g, b_k=self.b_g, ds_gmm=self.ds_gmm)
@@ -62,7 +63,8 @@ class DynamicalSystemAnimation(Animator):
                                                                                        a=100, b=50,
                                                                                        obstacle_environment=self.obstacle_environment,
                                                                                        apply_obstacle_avoidance_after_weighting=True,
-                                                                                       avoidance_dynamics_type=MLWOA.ObstacleAvoidanceType.LocallyRotatedFromObstacle)
+                                                                                       initial_dynamics_type=MLWOA.InitialDynamicsType.LocallyRotatedFromObstacle,
+                                                                                       )
 
         assert (len(self.obstacle_targets) <= len(
             self.obstacle_environment._obstacle_list))
@@ -97,13 +99,14 @@ class DynamicalSystemAnimation(Animator):
 
     def update_step(self, ii):
 
-        # Update attractors
-        for i in range(self.K):
-            velocity = self.dynamic_avoiders[i].evaluate(
-                self.attractor_positions[:, ii-1, i])
-            self.attractor_positions[:, ii, i] = self.attractor_positions[:,
-                                                                          ii-1, i] + velocity * self.dt_simulation
-            self.ds_gmm.mu[:, i] = self.attractor_positions[:, ii, i]
+        # Update gmm locatlions
+        if self.update_gmm_locations:
+            for i in range(self.K):
+                velocity = self.dynamic_avoiders[i].evaluate(
+                    self.attractor_positions[:, ii-1, i])
+                self.attractor_positions[:, ii, i] = self.attractor_positions[:,
+                                                                              ii-1, i] + velocity * self.dt_simulation
+                self.ds_gmm.mu[:, i] = self.attractor_positions[:, ii, i]
 
         # Update agent
         x_dot = self.trajectory_dynamics_with_local_avoidance.evaluate(
@@ -183,79 +186,76 @@ class DynamicalSystemAnimation(Animator):
 
 
 def run_simulation():
-    path_index = 0
-    path = lasa.DataSet.BendedLine.demos[path_index]
-    pos = path.pos
-    vel = path.vel
-    final_pos = pos[:, -1]
+    _, pos, _, priors, mus, sigmas, A_k, b_k, x_lim, y_lim = dataloader.load_data_with_predefined_params(
+        'BendedLine')
 
-    x_lim = [-45.0, 5.0]
-    y_lim = [-5.0, 20.0]
-
-    priors = np.array([[0.314, 0.193, 0.09, 0.125, 0.146, 0.132]])
-    mu = np.array([[-18.24738241,  -2.38762792, -39.88113386, -33.02005433, -16.73786891, -35.41178583],
-                  [-2.01251209,   1.94543297,   3.67688337,   9.87653523, 8.73540075,  -1.68948461]])
-
-    sigma = np.array([[[4.72548104e+01,  9.51259945e+00,  5.33200857e+00,
-                        1.53709129e+01,  3.45132894e+01,  1.40814127e+01],
-                       [-3.76600106e-02, -5.24313331e+00,  6.45669632e-01,
-                        3.22841802e+00, -9.24930031e+00, -1.07890577e+00]],
-                      [[-3.76600106e-02, -5.24313331e+00,  6.45669632e-01,
-                        3.22841802e+00, -9.24930031e+00, -1.07890577e+00],
-                       [1.16414861e-01,  3.98247450e+00,  4.98111432e+00,
-                          2.14939176e+00,  3.28400643e+00,  8.39037137e-01]]])
-    A_k = np.array([[[-4.31045650e-04,  4.18354787e-01,  1.76021431e-01,
-                      3.77465310e-01,  7.32518883e-01,  1.21667038e-01],
-                     [8.49819063e-05,  3.94922238e+00,  2.76803103e+00,
-                      2.97203976e+00,  3.76181358e+00,  4.37518747e+00]],
-                    [[8.49819063e-05, -2.27118040e+00, -3.91746552e-01,
-                      -6.55744803e-01, -1.08346276e+00, -1.26452215e-01],
-                     [-6.89553107e-05, -5.06866106e+00, -5.48327846e-01,
-                        -1.69308978e+00, -2.73017118e+00, -2.17499945e+00]]])
-    b_k = np.array([[-2.26896828e-10,  1.54856698e-11, -1.07329064e-12,
-                     -6.75164833e-13,  1.47433625e-13, -2.30172642e-11],
-                    [-2.11879115e-11, -3.58536067e-12, -3.24357875e-13,
-                     1.45587833e-12,  4.08763595e-12, -3.29942349e-11]])
-
-    ds_gmm = lpv_ds.GmmVariables(mu, priors, sigma)
+    ds_gmm = lpv_ds.GmmVariables(mus, priors, sigmas)
 
     obstacle_environment = ObstacleContainer()
-    obstacle_environment.append(
-        Cuboid(
-            axes_length=[5.0, 7.0],
-            center_position=np.array([-15.5, 4.0]),
-            margin_absolut=0.5,
-            orientation=-30*pi/180,
-            tail_effect=False,
-        )
-    )
 
-    obstacle_environment.append(
-        Ellipse(
-            axes_length=[5.0, 5.0],
-            center_position=np.array([-16.0, 10.0]),
-            margin_absolut=0.5,
-            tail_effect=False,
+    if scenario == 'LocalMinimaStaticObstacles':
+        obstacle_environment.append(
+            Cuboid(
+                axes_length=[5.0, 7.0],
+                center_position=np.array([-15.5, 4.0]),
+                margin_absolut=0.5,
+                orientation=-30*np.pi/180,
+                tail_effect=False,
+            )
         )
-    )
-    # obstacle_environment.append(
-    #     Cuboid(
-    #         axes_length=[5.0, 15.0],
-    #         center_position=np.array([-16.0, 10.0]),
-    #         margin_absolut=0.5,
-    #         tail_effect=False,
-    #     )
-    # )
 
-    # obstacle_environment.append(
-    #     Ellipse(
-    #         axes_length=[5.0, 5.0],
-    #         center_position=np.array([-38.0, 7.5]),
-    #         margin_absolut=0.5,
-    #         tail_effect=False,
-    #     )
-    # )
-    obstacle_targets = []
+        obstacle_environment.append(
+            Ellipse(
+                axes_length=[5.0, 5.0],
+                center_position=np.array([-16.0, 10.0]),
+                margin_absolut=0.5,
+                tail_effect=False,
+            )
+        )
+        obstacle_targets = []
+
+        for obs in obstacle_environment._obstacle_list:
+            obs.set_reference_point(
+                np.array([-15.8, 7.9]), in_obstacle_frame=False
+            )
+
+    elif scenario == 'ProblemCase':
+        obstacle_environment.append(
+            Cuboid(
+                axes_length=[5.0, 15.0],
+                center_position=np.array([-16.0, 10.0]),
+                margin_absolut=0.5,
+                tail_effect=False,
+            )
+        )
+        obstacle_environment.append(
+            Ellipse(
+                axes_length=[5.0, 5.0],
+                center_position=np.array([-38.0, 7.5]),
+                margin_absolut=0.5,
+                tail_effect=False,
+            )
+        )
+        obstacle_targets = []
+
+    elif scenario == 'DynamicObstaclesCase':
+        obstacle_environment.append(
+            Cuboid(
+                axes_length=[5.0, 15.0],
+                center_position=np.array([5.0, 10.0]),
+                margin_absolut=0.5,
+                tail_effect=False,
+            )
+        )
+        obstacle_environment.append(
+            Ellipse(
+                axes_length=[5.0, 5.0],
+                center_position=np.array([-33.0, 0.5]),
+                margin_absolut=0.5,
+                tail_effect=False,
+            )
+        )
+        obstacle_targets = [np.array([-25.0, 10.0]), np.array([-38.0, 7.5])]
 
     my_animation = DynamicalSystemAnimation(
         it_max=10000,
