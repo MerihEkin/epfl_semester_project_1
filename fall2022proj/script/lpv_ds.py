@@ -47,7 +47,7 @@ class LpvDs(DynamicalSystem):
                 f_g = self.A_k*x[:, i] + self.b_k
             x_dot[:, i] = f_g
         x.shape = (x.size,)
-        x_dot.shape = (2,)
+        x_dot.shape = (x.size,)
         return x_dot
 
     def posterior_probs_gmm(self, x, type):
@@ -74,6 +74,9 @@ class LpvDs(DynamicalSystem):
         return Px_k
 
     def ml_gaussian_pdf(self, Data, Mu, Sigma):
+        Data = Data.copy()
+        Mu = Mu.copy()
+        Sigma = Sigma.copy()
         if Data.shape[0] == 1:
             Data.shape = (Data.size, 1)
         if Mu.shape[0] == 1:

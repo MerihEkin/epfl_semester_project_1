@@ -24,6 +24,7 @@ from dynamic_obstacle_avoidance.visualization import plot_obstacles
 from vartools.animator import Animator
 from vartools.dynamical_systems import LinearSystem
 import motion_learning_w_local_obstacle_avoidance as MLWOA
+import initial_dynamics
 
 # 'ProblemCase', 'LocalMinimaStaticObstacles', 'DynamicObstaclesCase'
 scenario = 'ProblemCase'
@@ -59,12 +60,24 @@ class DynamicalSystemAnimation(Animator):
         self.lpv_ds = lpv_ds.LpvDs(
             A_k=self.A_g, b_k=self.b_g, ds_gmm=self.ds_gmm)
 
-        self.trajectory_dynamics_with_local_avoidance = MLWOA.MotionLearningWAvoidance(trajectory_dynamics=self.lpv_ds,
-                                                                                       a=100, b=50,
-                                                                                       obstacle_environment=self.obstacle_environment,
-                                                                                       apply_obstacle_avoidance_after_weighting=True,
-                                                                                       initial_dynamics_type=MLWOA.InitialDynamicsType.LocallyRotatedFromObstacle,
-                                                                                       )
+        # self.trajectory_dynamics_with_local_avoidance = MLWOA.MotionLearningWAvoidance(trajectory_dynamics=self.lpv_ds,
+        #                                                                                a=100, b=50,
+        #                                                                                obstacle_environment=self.obstacle_environment,
+        #                                                                                apply_obstacle_avoidance_after_weighting=True,
+        #                                                                                initial_dynamics_type=MLWOA.InitialDynamicsType.LocallyRotatedFromObstacle,
+        #                                                                                )
+
+        self.initial_dynamics = initial_dynamics.InitialDynamics(
+            maximum_velocity=1.0, attractor_position=reference_path[-1, :], dimension=2)
+        self.initial_dynamics.setup(trajectory_dynamics=self.lpv_ds,
+                                    a=100, b=50, obstacle_environment=obstacle_environment,
+                                    initial_dynamics_type=initial_dynamics.InitialDynamicsType.WeightedSum,
+                                    )
+
+        self.dynamic_avoider = ModulationAvoider(
+            initial_dynamics=self.initial_dynamics,
+            obstacle_environment=obstacle_environment,
+        )
 
         assert (len(self.obstacle_targets) <= len(
             self.obstacle_environment._obstacle_list))
@@ -109,8 +122,8 @@ class DynamicalSystemAnimation(Animator):
                 self.ds_gmm.mu[:, i] = self.attractor_positions[:, ii, i]
 
         # Update agent
-        x_dot = self.trajectory_dynamics_with_local_avoidance.evaluate(
-            position=self.agent_positions[:, ii-1], attractor=self.reference_path[-1, :])
+        x_dot = self.dynamic_avoider.evaluate(
+            position=self.agent_positions[:, ii-1])
         self.agent_positions[:, ii] = (
             self.dt_simulation * x_dot + self.agent_positions[:, ii-1])
 
