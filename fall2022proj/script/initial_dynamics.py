@@ -88,11 +88,11 @@ class InitialDynamics(DynamicalSystem):
 
         alpha, obs_center, obs = self.compute_alpha(position)
 
-        if not obs:
-            return vel_lpvds
-
         if not alpha:
             return np.zeros(self.dimension)
+
+        if obs is None:
+            return vel_lpvds
 
         weights = np.array([(1-alpha), alpha])
 
@@ -133,7 +133,7 @@ class InitialDynamics(DynamicalSystem):
         for n in range(N_obs):
             gammas[n] = self.obstacle_environment._obstacle_list[n].get_gamma(
                 position, in_obstacle_frame=False, in_global_frame=True)
-            if gammas[n] < 1:   # comment
+            if gammas[n] <= 1:   # comment
                 return False, None, None
 
         min_gamma = np.min(gammas)
@@ -206,10 +206,15 @@ class VectorFieldVisualization():
         lpvds = lpv_ds.LpvDs(A_k=A_g, b_k=b_g, ds_gmm=ds_gmm)
 
         self.initial_dynamics = InitialDynamics(
-            maximum_velocity=1.0, attractor_position=reference_path[-1, :], dimension=2)
+            maximum_velocity=1.0,
+            attractor_position=reference_path[-1, :],
+            dimension=2,
+        )
         self.initial_dynamics.setup(trajectory_dynamics=lpvds,
-                                    a=100, b=50, obstacle_environment=obstacle_environment,
-                                    initial_dynamics_type=InitialDynamicsType.WeightedSum,
+                                    a=100,
+                                    b=50,
+                                    obstacle_environment=obstacle_environment,
+                                    initial_dynamics_type=InitialDynamicsType.LocallyRotatedFromObstacle,
                                     )
 
         self.dynamic_avoider = ModulationAvoider(
@@ -236,6 +241,7 @@ class VectorFieldVisualization():
                 y[counter] = j
                 pos = np.array([i, j])
                 dir = self.dynamic_avoider.evaluate(position=pos)
+                # dir = self.initial_dynamics.evaluate(position=pos)
                 u[counter] = dir[0]
                 v[counter] = dir[1]
                 counter += 1
