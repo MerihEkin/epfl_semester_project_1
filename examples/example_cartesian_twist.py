@@ -27,18 +27,22 @@ class TwistController(Node):
 
         self.ds = create_cartesian_ds(DYNAMICAL_SYSTEM_TYPE.POINT_ATTRACTOR)
         self.ds.set_parameter_value(
-            "gain", [50.0, 50.0, 50.0, 10.0, 10.0, 10.0], sr.ParameterType.DOUBLE_ARRAY
+            "gain", [50.0, 50.0, 50.0, 10.0, 10.0,
+                     10.0], sr.ParameterType.DOUBLE_ARRAY
         )
 
-        self.ctrl = create_cartesian_controller(CONTROLLER_TYPE.COMPLIANT_TWIST)
+        self.ctrl = create_cartesian_controller(
+            CONTROLLER_TYPE.COMPLIANT_TWIST)
         self.ctrl.set_parameter_value(
             "linear_principle_damping", 1.0, sr.ParameterType.DOUBLE
         )
         self.ctrl.set_parameter_value(
             "linear_orthogonal_damping", 1.0, sr.ParameterType.DOUBLE
         )
-        self.ctrl.set_parameter_value("angular_stiffness", 0.5, sr.ParameterType.DOUBLE)
-        self.ctrl.set_parameter_value("angular_damping", 0.5, sr.ParameterType.DOUBLE)
+        self.ctrl.set_parameter_value(
+            "angular_stiffness", 0.5, sr.ParameterType.DOUBLE)
+        self.ctrl.set_parameter_value(
+            "angular_damping", 0.5, sr.ParameterType.DOUBLE)
 
     def run(self):
         target_set = False
@@ -63,12 +67,16 @@ class TwistController(Node):
                 target_set = True
             else:
                 twist = sr.CartesianTwist(self.ds.evaluate(state.ee_state))
+                print(type(self.ds.evaluate(state.ee_state)))
+                print(self.ds.evaluate(state.ee_state))
                 twist.clamp(0.25, 0.5)
                 self.command_torques = sr.JointTorques(
-                    self.ctrl.compute_command(twist, state.ee_state, state.jacobian)
+                    self.ctrl.compute_command(
+                        twist, state.ee_state, state.jacobian)
                 )
                 self.command.joint_state = state.joint_state
-                self.command.joint_state.set_torques(self.command_torques.get_torques())
+                self.command.joint_state.set_torques(
+                    self.command_torques.get_torques())
 
                 self.robot.send_command(self.command)
 
@@ -83,7 +91,8 @@ if __name__ == "__main__":
     # Spin in a separate thread
     controller = TwistController(robot=robot_interface, freq=500)
 
-    thread = threading.Thread(target=rclpy.spin, args=(controller,), daemon=True)
+    thread = threading.Thread(
+        target=rclpy.spin, args=(controller,), daemon=True)
     thread.start()
 
     try:

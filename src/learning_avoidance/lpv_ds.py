@@ -1,7 +1,6 @@
 
 from cmath import sin, cos
 from math import gamma, pi, sqrt, exp, pow
-from tkinter import W
 import numpy as np
 import numpy.linalg as LA
 import numpy.matlib as matlib

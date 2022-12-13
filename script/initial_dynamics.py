@@ -5,7 +5,7 @@ from tkinter import W
 import numpy as np
 from enum import Enum
 import matplotlib.pyplot as plt
-import load_dataset_and_params as dataloader
+# import load_dataset_and_params as dataloader
 
 from vartools.dynamical_systems._base import DynamicalSystem
 from vartools.states import ObjectPose
@@ -16,8 +16,6 @@ from dynamic_obstacle_avoidance.avoidance import ModulationAvoider
 
 from dynamic_obstacle_avoidance.obstacles import CuboidXd as Cuboid
 from dynamic_obstacle_avoidance.obstacles import EllipseWithAxes as Ellipse
-
-from dynamic_obstacle_avoidance.containers import ObstacleContainer
 
 from dynamic_obstacle_avoidance.avoidance import ModulationAvoider
 from dynamic_obstacle_avoidance.visualization import plot_obstacles
@@ -37,7 +35,7 @@ class InitialDynamics(DynamicalSystem):
 
     def setup(self, trajectory_dynamics: DynamicalSystem, a, b,
               obstacle_environment: ObstacleContainer, distance_decrease: float = 1.0,
-              initial_dynamics_type: InitialDynamicsType = InitialDynamicsType.LocalAvoidanceWLinearization) -> None:
+              initial_dynamics_type: InitialDynamicsType = InitialDynamicsType.WeightedSum) -> None:
         self.trajectory_dynamics = trajectory_dynamics
         self.obstacle_environment = obstacle_environment
         self.initial_dynamics_type = initial_dynamics_type

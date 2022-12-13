@@ -1,5 +1,4 @@
 
-import lpv_ds
 from math import exp
 from tkinter import W
 import numpy as np
@@ -19,6 +18,9 @@ from dynamic_obstacle_avoidance.obstacles import EllipseWithAxes as Ellipse
 
 from dynamic_obstacle_avoidance.avoidance import ModulationAvoider
 from dynamic_obstacle_avoidance.visualization import plot_obstacles
+
+import learning_avoidance.lpv_ds as lpv_ds 
+
 
 
 class InitialDynamicsType(Enum):

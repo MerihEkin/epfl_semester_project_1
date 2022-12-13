@@ -1,19 +1,23 @@
 # need to be in main file : pip install -e .
-
 from setuptools import setup, find_packages
-from setuptools import setup
 
-package_name = "project"
+package_name = "learning_avoidance"
 
 setup(
     name=package_name,
     version="0.0.0",
+    # packages=[package_name],
+    install_requires=["setuptools"],
     zip_safe=True,
-    description="Motion Learning wiht Obstacle Avoidance",
-    package_dir={"": "fall2022proj"},
-    packages=find_packages(where="fall2022proj", include=["data", "src"]),
-    # tests_require=["pytest"],
-    # install_requires=["setuptools"],
-    zip_safe=True,
-    license="TODO",
+    maintainer="Lukas Huber",
+    maintainer_email="lukas.huber@epfl.ch",
+    description="Obstacle Avoidance with the Franka Robot",
+    license="LICENSE",
+    package_dir={"": "src"},
+    packages=find_packages(where="src", include=[package_name]),
+    tests_require=["pytest"],
+    # entry_points={
+    # 'console_scripts': ['simulation_loader = pybullet_ros2.simulation_loader:main',
+    # 'pybullet_ros2 = pybullet_ros2.pybullet_ros2:main']
+    # }
 )
