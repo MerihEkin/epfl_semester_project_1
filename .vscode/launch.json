@@ -16,7 +16,7 @@
             "name": "test",
             "type": "python",
             "request": "launch",
-            "program": "fall2022proj/script/initial_dynamics.py",
+            "program": "examples/debugging.py",
             "console": "integratedTerminal",
             "justMyCode": true
         }

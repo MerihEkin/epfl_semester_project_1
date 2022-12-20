@@ -9,7 +9,7 @@ from random import shuffle
 import pyLasaDataset as lasa
 import matplotlib.pyplot as plt
 import matplotlib.patches as mplp
-import load_dataset_and_params as dataloader
+import src.learning_avoidance.load_dataset_and_params as dataloader
 
 # from dynamic_obstacle_avoidance.obstacles import Cuboid, Ellipse
 from dynamic_obstacle_avoidance.obstacles import CuboidXd as Cuboid

@@ -9,7 +9,12 @@ from dynamical_systems import DYNAMICAL_SYSTEM_TYPE, create_cartesian_ds
 from controllers import CONTROLLER_TYPE, create_cartesian_controller
 import state_representation as sr
 
+from franka_avoidance.optitrack_container import OptitrackContainer
+from franka_avoidance.pybullet_handler import PybulletHandler
+from dynamic_obstacle_avoidance.obstacles import EllipseWithAxes as Ellipse
+
 from dynamic_obstacle_avoidance.containers import ObstacleContainer
+
 import threading
 
 # import script.lpv_ds as lpvds
@@ -18,8 +23,8 @@ import threading
 # import lpv_ds as lpvds
 # from initial_dynamics import InitialDynamics, InitialDynamicsType
 
-import src.lpv_ds as lpvds
-from src.initial_dynamics import InitialDynamics, InitialDynamicsType
+import learning_avoidance.lpv_ds as lpvds
+from learning_avoidance.initial_dynamics import InitialDynamics, InitialDynamicsType
 
 import numpy as np
 import rclpy
@@ -27,7 +32,7 @@ import sys
 
 # Custom libraries
 
-data_path = '/home/ros2/ros2_ws/src/franka_obstacle_avoidance/project_ekin/fall2022proj/data/'
+data_path = '/home/ros2/ros2_ws/src/franka_obstacle_avoidance/project_ekin/data/'
 
 
 class TwistController(Node):
@@ -70,18 +75,29 @@ class TwistController(Node):
         P = genfromtxt(data_path+'P.csv', delimiter=',')
         gmm_ds = lpvds.GmmVariables(mu=mus, priors=priors, sigma=sigmas)
         self.lpv_ds = lpvds.LpvDs(A_k=A_k, b_k=b_k, ds_gmm=gmm_ds)
-        obstacle_environment = ObstacleContainer()
+        # obstacle_environment = ObstacleContainer()
+        self.obstacles = OptitrackContainer(use_optitrack=False)
+        self.obstacles.append(
+            Ellipse(
+                center_position=np.array([0.5, 0.2, 0]),
+                axes_length=np.array([0.3, 0.3, 0.3]),
+                # margin_absolut=0.5,
+                # tail_effect=False,
+            ),
+            obstacle_id=0,
+        )
+        self.obstacles.visualization_handler = PybulletHandler(self.obstacles)
         self.initial_dynamics = InitialDynamics(
             maximum_velocity=1.0,
             attractor_position=np.array(
-                [0.3756374418735504, -0.24511094391345978, 0.3886714279651642]),
-            dimension=2,
+                [0.4954361319541931, -0.2821080982685089, 0.16137483716011047]),
+            dimension=A_k.shape[0],
         )
-        self.initial_dynamics.setup(trajectory_dynamics=lpvds,
+        self.initial_dynamics.setup(trajectory_dynamics=self.lpv_ds,
                                     a=100,
                                     b=50,
-                                    obstacle_environment=obstacle_environment,
-                                    initial_dynamics_type=InitialDynamicsType.LocallyRotatedFromObstacle,
+                                    obstacle_environment=self.obstacles,
+                                    initial_dynamics_type=InitialDynamicsType.WeightedSum,
                                     )
 
     def run(self):
@@ -89,6 +105,7 @@ class TwistController(Node):
 
         while rclpy.ok():
             state = self.robot.get_state()
+            self.obstacles.update_obstacles()
             if not state:
                 continue
             if not target_set:
@@ -110,7 +127,7 @@ class TwistController(Node):
                 position = cartesian_state.get_position()
                 # x = np.array([position[0], position[1], position[2]])
                 x = np.array([position])
-                x_dot = self.initial_dynamics.evaluate(x=x)
+                x_dot = self.initial_dynamics.evaluate(position=x)
                 cartesian_state.set_linear_velocity(x_dot)
                 twist = sr.CartesianTwist(cartesian_state)
                 twist.clamp(0.25, 0.5)

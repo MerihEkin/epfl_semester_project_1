@@ -5,11 +5,11 @@ from tkinter import W
 import numpy as np
 from enum import Enum
 import matplotlib.pyplot as plt
-import load_dataset_and_params as dataloader
+import learning_avoidance.load_dataset_and_params as dataloader
 
 from vartools.dynamical_systems._base import DynamicalSystem
 from vartools.states import ObjectPose
-import dynamic_obstacle_avoidance.obstacle_linear_dynamics as ObstacleLinearDynamics
+import dynamic_obstacle_avoidance.rotational.dynamics as ObstacleLinearDynamics
 from dynamic_obstacle_avoidance.containers import ObstacleContainer
 import vartools.directional_space.directional_space as DirectionalSpace
 from dynamic_obstacle_avoidance.avoidance import ModulationAvoider

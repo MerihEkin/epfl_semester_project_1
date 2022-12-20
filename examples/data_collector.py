@@ -17,9 +17,11 @@ from network_interfaces.zmq.network import CommandMessage
 # Custom libraries
 from franka_avoidance.robot_interface import RobotZmqInterface as RobotInterface
 
+data_path = '/home/ros2/ros2_ws/src/franka_obstacle_avoidance/project_ekin/data/'
+
 
 class JointSpaceController(Node):
-    def __init__(self, robot, freq: float = 100, node_name="joint_controller", max_iter=1000):
+    def __init__(self, robot, freq: float = 100, node_name="joint_controller", max_iter=2000):
         super().__init__(node_name)
         self.robot = robot
         self.rate = self.create_rate(freq)
@@ -49,7 +51,7 @@ class JointSpaceController(Node):
             'linear_acceleration', 'linear_acceleration', 'linear_acceleration',
             'angular_acceleration', 'angular_acceleration', 'angular_acceleration'
         ])
-        df.to_csv('/home/ros2/ros2_ws/src/franka_obstacle_avoidance/project_ekin/fall2022proj/data/trajectory.csv',
+        df.to_csv(data_path + 'trajectory2.csv',
                   index=False, header=True, encoding='utf-8', sep=',')
         print("Trajector is saved!!")
 

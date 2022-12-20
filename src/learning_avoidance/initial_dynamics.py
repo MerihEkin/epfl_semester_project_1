@@ -1,14 +1,13 @@
 
 from math import exp
-from tkinter import W
 import numpy as np
 from enum import Enum
 import matplotlib.pyplot as plt
-import load_dataset_and_params as dataloader
+# import learning_avoidance.load_dataset_and_params as dataloader
 
 from vartools.dynamical_systems._base import DynamicalSystem
 from vartools.states import ObjectPose
-import dynamic_obstacle_avoidance.obstacle_linear_dynamics as ObstacleLinearDynamics
+import dynamic_obstacle_avoidance.rotational.dynamics as ObstacleLinearDynamics
 from dynamic_obstacle_avoidance.containers import ObstacleContainer
 import vartools.directional_space.directional_space as DirectionalSpace
 from dynamic_obstacle_avoidance.avoidance import ModulationAvoider
@@ -19,8 +18,8 @@ from dynamic_obstacle_avoidance.obstacles import EllipseWithAxes as Ellipse
 from dynamic_obstacle_avoidance.avoidance import ModulationAvoider
 from dynamic_obstacle_avoidance.visualization import plot_obstacles
 
-import learning_avoidance.lpv_ds as lpv_ds 
-
+import learning_avoidance.lpv_ds as lpv_ds
+import learning_avoidance.load_dataset_and_params as dataloader
 
 
 class InitialDynamicsType(Enum):
@@ -49,6 +48,9 @@ class InitialDynamics(DynamicalSystem):
 
         vel_lpvds = self.trajectory_dynamics.evaluate(position)
 
+        if len(self.obstacle_environment._obstacle_list) == 0:
+            return vel_lpvds
+
         null_direction = self._attractor_position - position
         null_direction /= np.linalg.norm(null_direction, 2)
 
@@ -58,8 +60,8 @@ class InitialDynamics(DynamicalSystem):
             if weights is None:
                 return vel_lpvds
 
-            if weights is False:
-                return np.zeros((self.dimension))
+            # if weights is False:
+            #     return np.zeros((self.dimension))
 
             directions = np.zeros((N_obs+1, self.dimension))
             for n in range(N_obs):
@@ -88,11 +90,8 @@ class InitialDynamics(DynamicalSystem):
 
         alpha, obs_center, obs = self.compute_alpha(position)
 
-        if not alpha:
-            return np.zeros(self.dimension)
-
         if obs is None:
-            return vel_lpvds
+            return np.zeros(self.dimension)
 
         weights = np.array([(1-alpha), alpha])
 
@@ -125,8 +124,8 @@ class InitialDynamics(DynamicalSystem):
     def compute_alpha(self, position):
         N_obs = len(self.obstacle_environment._obstacle_list)
 
-        if N_obs == 0:
-            return 0, None, None
+        # if N_obs == 0:
+        #     return None, None, None
 
         gammas = np.zeros((N_obs))
 
@@ -134,7 +133,7 @@ class InitialDynamics(DynamicalSystem):
             gammas[n] = self.obstacle_environment._obstacle_list[n].get_gamma(
                 position, in_obstacle_frame=False, in_global_frame=True)
             if gammas[n] <= 1:   # comment
-                return False, None, None
+                return None, None, None
 
         min_gamma = np.min(gammas)
         index = np.argmin(gammas)
@@ -214,7 +213,7 @@ class VectorFieldVisualization():
                                     a=100,
                                     b=50,
                                     obstacle_environment=obstacle_environment,
-                                    initial_dynamics_type=InitialDynamicsType.LocallyRotatedFromObstacle,
+                                    initial_dynamics_type=InitialDynamicsType.WeightedSum,
                                     )
 
         self.dynamic_avoider = ModulationAvoider(

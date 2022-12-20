@@ -1,13 +1,12 @@
 from ssl import AlertDescription
 from typing import List
 
-from sympy import false, true
-import lpv_ds
+import learning_avoidance.lpv_ds as lpv_ds
 import matlab.engine
 import numpy as np
 from random import random
 from random import shuffle
-import load_dataset_and_params as dataloader
+import learning_avoidance.load_dataset_and_params as dataloader
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mplp
@@ -24,7 +23,7 @@ from dynamic_obstacle_avoidance.visualization import plot_obstacles
 from vartools.animator import Animator
 from vartools.dynamical_systems import LinearSystem
 import motion_learning_w_local_obstacle_avoidance as MLWOA
-import initial_dynamics
+import learning_avoidance.initial_dynamics as initial_dynamics
 
 # 'ProblemCase', 'LocalMinimaStaticObstacles', 'DynamicObstaclesCase'
 scenario = 'ProblemCase'

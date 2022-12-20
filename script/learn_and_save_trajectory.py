@@ -1,9 +1,9 @@
 import os
 import pandas as pd
 import numpy as np
-from load_dataset_and_params import get_gmm_from_matlab
-input_file = os.getcwd() + '/fall2022proj/data/trajectory.csv'
-output_file = os.getcwd() + '/fall2022proj/data/'
+from learning_avoidance.load_dataset_and_params import get_gmm_from_matlab
+input_file = os.getcwd() + '/data/trajectory2.csv'
+output_file = os.getcwd() + '/data/'
 
 
 def learn_trajector():
