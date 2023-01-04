@@ -1,8 +1,8 @@
-
 from math import exp
 import numpy as np
 from enum import Enum
 import matplotlib.pyplot as plt
+
 # import learning_avoidance.load_dataset_and_params as dataloader
 
 from vartools.dynamical_systems._base import DynamicalSystem
@@ -31,12 +31,24 @@ class InitialDynamicsType(Enum):
 
 
 class InitialDynamics(DynamicalSystem):
-    def __init__(self, pose: ObjectPose = None, maximum_velocity: float = None, dimension: int = None, attractor_position: np.ndarray = None):
+    def __init__(
+        self,
+        pose: ObjectPose = None,
+        maximum_velocity: float = None,
+        dimension: int = None,
+        attractor_position: np.ndarray = None,
+    ):
         super().__init__(pose, maximum_velocity, dimension, attractor_position)
 
-    def setup(self, trajectory_dynamics: DynamicalSystem, a, b,
-              obstacle_environment: ObstacleContainer, distance_decrease: float = 1.0,
-              initial_dynamics_type: InitialDynamicsType = InitialDynamicsType.WeightedSum) -> None:
+    def setup(
+        self,
+        trajectory_dynamics: DynamicalSystem,
+        a,
+        b,
+        obstacle_environment: ObstacleContainer,
+        distance_decrease: float = 1.0,
+        initial_dynamics_type: InitialDynamicsType = InitialDynamicsType.WeightedSum,
+    ) -> None:
         self.trajectory_dynamics = trajectory_dynamics
         self.obstacle_environment = obstacle_environment
         self.initial_dynamics_type = initial_dynamics_type
@@ -63,12 +75,11 @@ class InitialDynamics(DynamicalSystem):
             # if weights is False:
             #     return np.zeros((self.dimension))
 
-            directions = np.zeros((N_obs+1, self.dimension))
+            directions = np.zeros((N_obs + 1, self.dimension))
             for n in range(N_obs):
                 obs_center = self.obstacle_environment._obstacle_list[n].center_position
                 obs_center = obs_center.copy()
-                directions[n, :] = self.trajectory_dynamics.evaluate(
-                    obs_center)
+                directions[n, :] = self.trajectory_dynamics.evaluate(obs_center)
                 if True:
                     vel_reference = np.array(directions[n, :], copy=True)
                     LRFO = ObstacleLinearDynamics.LocallyRotatedFromObtacle(
@@ -82,7 +93,11 @@ class InitialDynamics(DynamicalSystem):
             directions = directions.T
 
             velocity = DirectionalSpace.get_directional_weighted_sum(
-                null_direction=null_direction, directions=directions, weights=weights, normalize=True)
+                null_direction=null_direction,
+                directions=directions,
+                weights=weights,
+                normalize=True,
+            )
 
             velocity = self.limit_velocity(velocity=velocity)
 
@@ -93,31 +108,44 @@ class InitialDynamics(DynamicalSystem):
         if obs is None:
             return np.zeros(self.dimension)
 
-        weights = np.array([(1-alpha), alpha])
+        weights = np.array([(1 - alpha), alpha])
 
         if self.initial_dynamics_type == InitialDynamicsType.LocalTangentApprox:
             pass
         elif self.initial_dynamics_type == InitialDynamicsType.LocalAttractorFollowing:
             directions = np.vstack((vel_lpvds, null_direction))
             directions = directions.T
-        elif self.initial_dynamics_type == InitialDynamicsType.LocalAvoidanceWLinearization:
+        elif (
+            self.initial_dynamics_type
+            == InitialDynamicsType.LocalAvoidanceWLinearization
+        ):
             vel_linearization = self.trajectory_dynamics.evaluate(obs_center)
             directions = np.vstack((vel_lpvds, vel_linearization))
             directions = directions.T
-        elif self.initial_dynamics_type == InitialDynamicsType.LocallyRotatedFromObstacle:
+        elif (
+            self.initial_dynamics_type == InitialDynamicsType.LocallyRotatedFromObstacle
+        ):
             vel_initial = self.trajectory_dynamics.evaluate(obs_center)
             LRFO = ObstacleLinearDynamics.LocallyRotatedFromObtacle(
-                obstacle=obs, attractor_position=self.attractor_position, reference_velocity=vel_initial)
+                obstacle=obs,
+                attractor_position=self.attractor_position,
+                reference_velocity=vel_initial,
+            )
             vel_initial = LRFO.evaluate(position=position)
             directions = np.vstack((vel_lpvds, vel_initial))
             directions = directions.T
 
         velocity = DirectionalSpace.get_directional_weighted_sum(
-            null_direction=null_direction, directions=directions, weights=weights, normalize=True)
+            null_direction=null_direction,
+            directions=directions,
+            weights=weights,
+            normalize=True,
+        )
 
         velocity = self.limit_velocity(velocity=velocity)
         velocity = self.limit_velocity_around_attractor(
-            velocity=velocity, position=position)
+            velocity=velocity, position=position
+        )
 
         return velocity
 
@@ -131,14 +159,15 @@ class InitialDynamics(DynamicalSystem):
 
         for n in range(N_obs):
             gammas[n] = self.obstacle_environment._obstacle_list[n].get_gamma(
-                position, in_obstacle_frame=False, in_global_frame=True)
-            if gammas[n] <= 1:   # comment
+                position, in_obstacle_frame=False, in_global_frame=True
+            )
+            if gammas[n] <= 1:  # comment
                 return None, None, None
 
         min_gamma = np.min(gammas)
         index = np.argmin(gammas)
 
-        alpha = 1 / (1 + exp(-self.a * (1/(min_gamma+1e-16)) + self.b))
+        alpha = 1 / (1 + exp(-self.a * (1 / (min_gamma + 1e-16)) + self.b))
 
         obs = self.obstacle_environment._obstacle_list[index]
 
@@ -153,18 +182,19 @@ class InitialDynamics(DynamicalSystem):
             return None, N_obs
 
         gammas = np.zeros((N_obs))
-        weights = np.zeros((N_obs+1))
+        weights = np.zeros((N_obs + 1))
 
         for n in range(N_obs):
             gammas[n] = self.obstacle_environment._obstacle_list[n].get_gamma(
-                position, in_obstacle_frame=False, in_global_frame=True)
-            if gammas[n] < 1:   # comment
+                position, in_obstacle_frame=False, in_global_frame=True
+            )
+            if gammas[n] < 1:  # comment
                 return False, None
             elif abs(gammas[n] - 1) < 1e-3:
                 weights = np.zeros((N_obs))
                 weights[n] = 1
                 break
-            weights[n] = 1/(gammas[n] - 1)
+            weights[n] = 1 / (gammas[n] - 1)
 
         sum_weights = np.sum(weights)
         if sum_weights > 1:
@@ -193,8 +223,19 @@ class InitialDynamics(DynamicalSystem):
         return velocity / mag_vel * desired_velocity
 
 
-class VectorFieldVisualization():
-    def __init__(self, x_lim, y_lim, obstacle_environment: ObstacleContainer, reference_path, A_g, b_g, ds_gmm, n_x=20, n_y=20):
+class VectorFieldVisualization:
+    def __init__(
+        self,
+        x_lim,
+        y_lim,
+        obstacle_environment: ObstacleContainer,
+        reference_path,
+        A_g,
+        b_g,
+        ds_gmm,
+        n_x=20,
+        n_y=20,
+    ):
         self.x_lim = x_lim
         self.y_lim = y_lim
         self.obstacle_environment = obstacle_environment
@@ -209,12 +250,13 @@ class VectorFieldVisualization():
             attractor_position=reference_path[-1, :],
             dimension=2,
         )
-        self.initial_dynamics.setup(trajectory_dynamics=lpvds,
-                                    a=100,
-                                    b=50,
-                                    obstacle_environment=obstacle_environment,
-                                    initial_dynamics_type=InitialDynamicsType.WeightedSum,
-                                    )
+        self.initial_dynamics.setup(
+            trajectory_dynamics=lpvds,
+            a=100,
+            b=50,
+            obstacle_environment=obstacle_environment,
+            initial_dynamics_type=InitialDynamicsType.WeightedSum,
+        )
 
         self.dynamic_avoider = ModulationAvoider(
             initial_dynamics=self.initial_dynamics,
@@ -224,8 +266,14 @@ class VectorFieldVisualization():
         self.fig, self.ax = plt.subplots(figsize=(10, 8))
 
     def plot_vector_field(self):
-        self.ax.plot(self.path[:, 0], self.path[:, 1],
-                     markersize=0.5, marker=".", color="yellowgreen", zorder=-4)
+        self.ax.plot(
+            self.path[:, 0],
+            self.path[:, 1],
+            markersize=0.5,
+            marker=".",
+            color="yellowgreen",
+            zorder=-4,
+        )
         xs = np.linspace(self.x_lim[0], self.x_lim[1], self.nx)
         ys = np.linspace(self.y_lim[0], self.y_lim[1], self.ny)
         nr_of_points = xs.size * ys.size
@@ -244,7 +292,7 @@ class VectorFieldVisualization():
                 u[counter] = dir[0]
                 v[counter] = dir[1]
                 counter += 1
-        self.ax.quiver(x, y, u, v, color='black', zorder=-1)
+        self.ax.quiver(x, y, u, v, color="black", zorder=-1)
         # Draw obstacles
         plot_obstacles(
             ax=self.ax,
@@ -262,8 +310,18 @@ class VectorFieldVisualization():
 
 
 def visualize_vector_field():
-    _, pos, _, priors, mus, sigmas, A_k, b_k, x_lim, y_lim = dataloader.load_data_with_predefined_params(
-        'BendedLine')
+    (
+        _,
+        pos,
+        _,
+        priors,
+        mus,
+        sigmas,
+        A_k,
+        b_k,
+        x_lim,
+        y_lim,
+    ) = dataloader.load_data_with_predefined_params("BendedLine")
 
     ds_gmm = lpv_ds.GmmVariables(mus, priors, sigmas)
 
@@ -290,8 +348,10 @@ def visualize_vector_field():
         y_lim=y_lim,
         obstacle_environment=obstacle_environment,
         reference_path=pos.transpose(),
-        n_x=40, n_y=40,
-        A_g=A_k, b_g=b_k,
+        n_x=40,
+        n_y=40,
+        A_g=A_k,
+        b_g=b_k,
         ds_gmm=ds_gmm,
     )
     vfv.plot_vector_field()

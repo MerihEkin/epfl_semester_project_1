@@ -1,4 +1,3 @@
-
 from cmath import sin, cos
 from math import gamma, pi, sqrt, exp, pow
 import numpy as np
@@ -31,7 +30,7 @@ class LpvDs(DynamicalSystem):
         K = self.ds_gmm.priors.shape[1]  # K = length(ds_gmm.Priors);
 
         # Posterior Probabilities per local DS
-        beta_k_x = self.posterior_probs_gmm(x, 'norm')
+        beta_k_x = self.posterior_probs_gmm(x, "norm")
 
         # Output Velocity
         x_dot = np.zeros((N, M))  # x_dot = zeros(N,M);
@@ -39,11 +38,12 @@ class LpvDs(DynamicalSystem):
             if self.b_k.shape[1] > 1:
                 f_g = np.zeros((N, K))
                 for k in range(K):
-                    f_g[:, k] = beta_k_x[k, i] * \
-                        (self.A_k[:, :, k] @ x[:, i] + self.b_k[:, k])
+                    f_g[:, k] = beta_k_x[k, i] * (
+                        self.A_k[:, :, k] @ x[:, i] + self.b_k[:, k]
+                    )
                 f_g = np.sum(f_g, 1)
             else:
-                f_g = self.A_k*x[:, i] + self.b_k
+                f_g = self.A_k * x[:, i] + self.b_k
             x_dot[:, i] = f_g
         x.shape = (x.size,)
         x_dot.shape = (x.size,)
@@ -58,16 +58,13 @@ class LpvDs(DynamicalSystem):
         Px_k = np.zeros((K, M))
 
         for k in range(K):
-            Px_k[k, :] = self.ml_gaussian_pdf(
-                x, Mu[:, k], Sigma[:, :, k]) + self.eps
+            Px_k[k, :] = self.ml_gaussian_pdf(x, Mu[:, k], Sigma[:, :, k]) + self.eps
 
-        alpha_Px_k = np.multiply(matlib.repmat(
-            np.transpose(Priors), 1, M), Px_k)
+        alpha_Px_k = np.multiply(matlib.repmat(np.transpose(Priors), 1, M), Px_k)
 
-        if type == 'norm':
-            Px_k = np.divide(alpha_Px_k, matlib.repmat(
-                np.sum(alpha_Px_k, 0), K, 1))
-        elif type == 'un-norm':
+        if type == "norm":
+            Px_k = np.divide(alpha_Px_k, matlib.repmat(np.sum(alpha_Px_k, 0), K, 1))
+        elif type == "un-norm":
             Px_k = alpha_Px_k
 
         return Px_k
@@ -86,7 +83,11 @@ class LpvDs(DynamicalSystem):
         Mus.shape = (Mu.shape[0], nbData)
         Data = np.transpose(Data - Mus)
         prob = np.sum(np.multiply(np.matmul(Data, LA.inv(Sigma)), Data), 1)
-        prob = exp(-0.5 * prob) / sqrt(pow((2*pi), nbVar)) * \
-            (abs(LA.det(Sigma) + self.realmin)) + self.realmin
+        prob = (
+            exp(-0.5 * prob)
+            / sqrt(pow((2 * pi), nbVar))
+            * (abs(LA.det(Sigma) + self.realmin))
+            + self.realmin
+        )
 
         return prob
