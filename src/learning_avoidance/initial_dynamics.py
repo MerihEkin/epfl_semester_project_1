@@ -19,7 +19,7 @@ from dynamic_obstacle_avoidance.avoidance import ModulationAvoider
 from dynamic_obstacle_avoidance.visualization import plot_obstacles
 
 import learning_avoidance.lpv_ds as lpv_ds
-import learning_avoidance.load_dataset_and_params as dataloader
+# import learning_avoidance.load_dataset_and_params as dataloader
 
 
 class InitialDynamicsType(Enum):
@@ -57,7 +57,7 @@ class InitialDynamics(DynamicalSystem):
         if self.initial_dynamics_type == InitialDynamicsType.WeightedSum:
             weights, N_obs = self.compute_weights(position)
 
-            if weights is None:
+            if N_obs == 0:
                 return vel_lpvds
 
             # if weights is False:
@@ -85,6 +85,7 @@ class InitialDynamics(DynamicalSystem):
                 null_direction=null_direction, directions=directions, weights=weights, normalize=True)
 
             velocity = self.limit_velocity(velocity=velocity)
+            # breakpoint()
 
             return velocity
 
@@ -97,13 +98,16 @@ class InitialDynamics(DynamicalSystem):
 
         if self.initial_dynamics_type == InitialDynamicsType.LocalTangentApprox:
             pass
+
         elif self.initial_dynamics_type == InitialDynamicsType.LocalAttractorFollowing:
             directions = np.vstack((vel_lpvds, null_direction))
             directions = directions.T
+
         elif self.initial_dynamics_type == InitialDynamicsType.LocalAvoidanceWLinearization:
             vel_linearization = self.trajectory_dynamics.evaluate(obs_center)
             directions = np.vstack((vel_lpvds, vel_linearization))
             directions = directions.T
+
         elif self.initial_dynamics_type == InitialDynamicsType.LocallyRotatedFromObstacle:
             vel_initial = self.trajectory_dynamics.evaluate(obs_center)
             LRFO = ObstacleLinearDynamics.LocallyRotatedFromObtacle(
@@ -150,7 +154,7 @@ class InitialDynamics(DynamicalSystem):
         N_obs = len(self.obstacle_environment._obstacle_list)
 
         if N_obs == 0:
-            return None, N_obs
+            return np.ones(1), N_obs
 
         gammas = np.zeros((N_obs))
         weights = np.zeros((N_obs+1))
@@ -158,12 +162,22 @@ class InitialDynamics(DynamicalSystem):
         for n in range(N_obs):
             gammas[n] = self.obstacle_environment._obstacle_list[n].get_gamma(
                 position, in_obstacle_frame=False, in_global_frame=True)
+
+            # in meters gamma gets very small
+            gammas[n] = (gammas[n] - 1) * 30 + 1
+
             if gammas[n] < 1:   # comment
-                return False, None
-            elif abs(gammas[n] - 1) < 1e-3:
-                weights = np.zeros((N_obs))
+                gammas = np.zeros((N_obs))
+                weights = np.zeros((N_obs+1))
+                gammas[n] = 1
                 weights[n] = 1
                 break
+
+            elif abs(gammas[n] - 1) < 1e-3:
+                weights = np.zeros((N_obs+1))
+                weights[n] = 1
+                break
+
             weights[n] = 1/(gammas[n] - 1)
 
         sum_weights = np.sum(weights)
@@ -171,6 +185,7 @@ class InitialDynamics(DynamicalSystem):
             weights /= sum_weights
         else:
             weights[-1] = 1 - sum_weights
+        # breakpoint()
 
         return weights, N_obs
 

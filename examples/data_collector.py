@@ -66,7 +66,7 @@ class JointSpaceController(Node):
             'linear_acceleration', 'linear_acceleration', 'linear_acceleration',
             'angular_acceleration', 'angular_acceleration', 'angular_acceleration'
         ])
-        df.to_csv(data_path + 'trajectory3.csv',
+        df.to_csv(data_path + 'trajectory10.csv',
                   index=False, header=True, encoding='utf-8', sep=',')
         print(f'\niter: {self.current_iter}')
         print("Trajector is saved!!")
@@ -148,7 +148,7 @@ if __name__ == "__main__":
 
     # Spin in a separate thread
     controller = JointSpaceController(
-        robot=robot_interface, freq=50, max_iter=1500)
+        robot=robot_interface, freq=50, max_iter=100)
 
     thread = threading.Thread(
         target=rclpy.spin, args=(controller,), daemon=True)

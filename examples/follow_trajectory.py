@@ -11,7 +11,9 @@ import state_representation as sr
 
 from franka_avoidance.optitrack_container import OptitrackContainer
 from franka_avoidance.pybullet_handler import PybulletHandler
+from franka_avoidance.rviz_handler import RvizHandler
 from dynamic_obstacle_avoidance.obstacles import EllipseWithAxes as Ellipse
+from dynamic_obstacle_avoidance.avoidance import ModulationAvoider
 
 from dynamic_obstacle_avoidance.containers import ObstacleContainer
 
@@ -32,11 +34,11 @@ import sys
 
 # Custom libraries
 
-data_path = '/home/ros2/ros2_ws/src/franka_obstacle_avoidance/project_ekin/data/'
+data_path = '/home/ros2/ros2_ws/src/franka_avoidance/project_ekin/data/'
 
 
 class TwistController(Node):
-    def __init__(self, robot, freq: float = 100, node_name="twist_controller"):
+    def __init__(self, robot, freq: float = 100, node_name="twist_controller", is_simulation: bool = True):
         super().__init__(node_name)
         self.robot = robot
         self.rate = self.create_rate(freq)
@@ -46,51 +48,66 @@ class TwistController(Node):
 
         self.ds = create_cartesian_ds(DYNAMICAL_SYSTEM_TYPE.POINT_ATTRACTOR)
         self.ds.set_parameter_value(
-            "gain", [50.0, 50.0, 50.0, 10.0, 10.0,
-                     10.0], sr.ParameterType.DOUBLE_ARRAY
+            # "gain", [200.0, 200.0, 200.0, 50.0, 50.0, 50.0],
+            # "gain", [1000.0, 1000.0, 1000.0, 50.0, 50.0, 50.0],
+            "gain", [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            sr.ParameterType.DOUBLE_ARRAY
         )
 
         self.ctrl = create_cartesian_controller(
             CONTROLLER_TYPE.COMPLIANT_TWIST)
-        self.ctrl.set_parameter_value(
-            "linear_principle_damping", 1.0, sr.ParameterType.DOUBLE
-        )
-        self.ctrl.set_parameter_value(
-            "linear_orthogonal_damping", 1.0, sr.ParameterType.DOUBLE
-        )
-        self.ctrl.set_parameter_value(
-            "angular_stiffness", 0.5, sr.ParameterType.DOUBLE)
-        self.ctrl.set_parameter_value(
-            "angular_damping", 0.5, sr.ParameterType.DOUBLE)
+        if is_simulation:
+            self.ctrl.set_parameter_value(
+                "linear_principle_damping", 1., sr.ParameterType.DOUBLE)
+            self.ctrl.set_parameter_value(
+                "linear_orthogonal_damping", 1., sr.ParameterType.DOUBLE)
+            self.ctrl.set_parameter_value(
+                "angular_stiffness", .5, sr.ParameterType.DOUBLE)
+            self.ctrl.set_parameter_value(
+                "angular_damping", .5, sr.ParameterType.DOUBLE)
+        else:
+            self.ctrl.set_parameter_value(
+                "linear_principle_damping", 50., sr.ParameterType.DOUBLE)
+            self.ctrl.set_parameter_value(
+                "linear_orthogonal_damping", 50., sr.ParameterType.DOUBLE)
+            self.ctrl.set_parameter_value(
+                "angular_stiffness", 2., sr.ParameterType.DOUBLE)
+            self.ctrl.set_parameter_value(
+                "angular_damping", 2., sr.ParameterType.DOUBLE)
 
-        priors = genfromtxt(data_path+'priors.csv', delimiter=',')
+        experiment_nr = 10
+        priors = genfromtxt(
+            data_path + f'priors{experiment_nr}.csv', delimiter=',')
         K = priors.size
         priors.shape = (1, K)
-        mus = genfromtxt(data_path+'mus.csv', delimiter=',')
-        sigmas = genfromtxt(data_path+'sigmas.csv', delimiter=',')
+        mus = genfromtxt(data_path+f'mus{experiment_nr}.csv', delimiter=',')
+        sigmas = genfromtxt(
+            data_path+f'sigmas{experiment_nr}.csv', delimiter=',')
         sigmas = np.reshape(sigmas, (sigmas.shape[0], sigmas.shape[0], -1))
-        A_k = genfromtxt(data_path+'A_k.csv', delimiter=',')
+        A_k = genfromtxt(data_path+f'A_k{experiment_nr}.csv', delimiter=',')
         A_k = np.reshape(A_k, (A_k.shape[0], A_k.shape[0], -1))
-        b_k = genfromtxt(data_path+'b_k.csv', delimiter=',')
-        P = genfromtxt(data_path+'P.csv', delimiter=',')
+        b_k = genfromtxt(data_path+f'b_k{experiment_nr}.csv', delimiter=',')
+        P = genfromtxt(data_path+f'P{experiment_nr}.csv', delimiter=',')
         gmm_ds = lpvds.GmmVariables(mu=mus, priors=priors, sigma=sigmas)
         self.lpv_ds = lpvds.LpvDs(A_k=A_k, b_k=b_k, ds_gmm=gmm_ds)
         # obstacle_environment = ObstacleContainer()
-        self.obstacles = OptitrackContainer(use_optitrack=False)
+        self.obstacles = OptitrackContainer(use_optitrack=True)
         self.obstacles.append(
             Ellipse(
-                center_position=np.array([0.5, 0.2, 0]),
-                axes_length=np.array([0.3, 0.3, 0.3]),
-                # margin_absolut=0.5,
+                center_position=np.array([0.0, 0.0, 0.0]),
+                axes_length=np.array([0.1, 0.06, 0.16]),
+                margin_absolut=0.16,
+                linear_velocity=np.zeros(3),
                 # tail_effect=False,
             ),
-            obstacle_id=0,
+            obstacle_id=28,
         )
-        self.obstacles.visualization_handler = PybulletHandler(self.obstacles)
+        # self.obstacles.visualization_handler = PybulletHandler(self.obstacles)
+        self.obstacles.visualization_handler = RvizHandler(self.obstacles)
         self.initial_dynamics = InitialDynamics(
             maximum_velocity=1.0,
             attractor_position=np.array(
-                [0.4954361319541931, -0.2821080982685089, 0.16137483716011047]),
+                [0.40939928740376075, -0.6546517367820528, 0.22282657197812547]),
             dimension=A_k.shape[0],
         )
         self.initial_dynamics.setup(trajectory_dynamics=self.lpv_ds,
@@ -100,12 +117,20 @@ class TwistController(Node):
                                     initial_dynamics_type=InitialDynamicsType.WeightedSum,
                                     )
 
+        self.dynamic_avoider = ModulationAvoider(
+            initial_dynamics=self.initial_dynamics,
+            obstacle_environment=self.obstacles,
+        )
+
     def run(self):
         target_set = False
 
         while rclpy.ok():
             state = self.robot.get_state()
-            self.obstacles.update_obstacles()
+
+            self.obstacles.update()
+            # print("Updated obstacles.")
+
             if not state:
                 continue
             if not target_set:
@@ -123,14 +148,26 @@ class TwistController(Node):
                 )
                 target_set = True
             else:
-                cartesian_state = sr.CartesianState(state.ee_state)
-                position = cartesian_state.get_position()
+                current_state = sr.CartesianState(state.ee_state)
+                position = current_state.get_position()
+
                 # x = np.array([position[0], position[1], position[2]])
                 x = np.array([position])
-                x_dot = self.initial_dynamics.evaluate(position=x)
+                x_dot = self.dynamic_avoider.evaluate(position=x)
+
+                # print(np.round(x_dot, 4))
+                max_velocity = 0.25
+                if np.linalg.norm(x_dot) > max_velocity:
+                    x_dot = max_velocity * x_dot / np.linalg.norm(x_dot)
+
+                # print(np.round(x_dot, 4))
+                cartesian_state = self.ds.evaluate(state.ee_state)
                 cartesian_state.set_linear_velocity(x_dot)
+
+                # twist = sr.CartesianTwist(self.ds.evaluate(state.ee_state))
                 twist = sr.CartesianTwist(cartesian_state)
                 twist.clamp(0.25, 0.5)
+                print(twist)
                 self.command_torques = sr.JointTorques(
                     self.ctrl.compute_command(
                         twist, state.ee_state, state.jacobian)
@@ -140,6 +177,7 @@ class TwistController(Node):
                     self.command_torques.get_torques())
 
                 self.robot.send_command(self.command)
+                # print(self.command.joint_state.get_torques())
 
             self.rate.sleep()
 
@@ -150,7 +188,8 @@ if __name__ == "__main__":
     robot_interface = RobotInterface("*:1601", "*:1602")
 
     # Spin in a separate thread
-    controller = TwistController(robot=robot_interface, freq=500)
+    controller = TwistController(
+        robot=robot_interface, freq=500, is_simulation=False)
 
     thread = threading.Thread(
         target=rclpy.spin, args=(controller,), daemon=True)
